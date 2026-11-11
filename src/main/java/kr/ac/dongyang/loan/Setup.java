@@ -30,11 +30,12 @@ class Setup implements CommandLineRunner {
             .build();
     return username -> {
       if (master.getUsername().equals(username)) return User.withUserDetails(master).build();
-      var hashes =
-          db.queryForList(
-              "select password_hash from staff_login where username=?", String.class, username);
-      if (hashes.isEmpty()) throw new UsernameNotFoundException("등록된 계정이 없습니다.");
-      return User.withUsername(username).password(hashes.get(0)).roles("ADMIN").build();
+      var accounts = db.query(
+          "select password_hash,session_key from staff_login where username=?",
+          (rs, n) -> User.withUsername(username).password(rs.getString(1))
+              .authorities("ROLE_ADMIN", "SESSION_" + rs.getString(2)).build(), username);
+      if (accounts.isEmpty()) throw new UsernameNotFoundException("등록된 계정이 없습니다.");
+      return accounts.get(0);
     };
   }
 
@@ -42,10 +43,18 @@ class Setup implements CommandLineRunner {
   SecurityFilterChain security(HttpSecurity http) throws Exception {
     return http.authorizeHttpRequests(
             a ->
-                a.requestMatchers("/api/admin/action/password")
+                a.requestMatchers("/api/admin/action/staff", "/api/admin/action/password", "/api/admin/action/roster", "/api/admin/action/sheet")
                     .hasRole("MASTER")
                     .requestMatchers("/admin", "/admin/**", "/api/admin/**")
-                    .hasRole("ADMIN")
+                    .access((authentication, request) -> {
+                      var user = authentication.get();
+                      boolean allowed = user.getAuthorities().stream().anyMatch(authority ->
+                          authority.getAuthority().equals("ROLE_MASTER") ||
+                          (authority.getAuthority().startsWith("SESSION_") &&
+                           db.queryForObject("select count(*) from staff_login where username=? and session_key=?",
+                               Integer.class, user.getName(), authority.getAuthority().substring(8)) == 1));
+                      return new org.springframework.security.authorization.AuthorizationDecision(allowed);
+                    })
                     .anyRequest()
                     .permitAll())
         .formLogin(f -> f.loginPage("/login").defaultSuccessUrl("/admin", true).permitAll())
@@ -74,6 +83,6 @@ class Setup implements CommandLineRunner {
     String[] people =
         "류다영 김신영 김수빈 이승혁 정우석 유세이 정현일 문정윤 박세은 박수호 김미란 김시연 박도연 임호윤 한승윤 최화영 이윤석 김소영".split(" ");
     for (int i = 0; i < people.length; i++)
-      db.update("insert into staff values(?,?,?)", i + 1, people[i], "");
+      db.update("insert into staff(id,name,phone) values(?,?,?)", i + 1, people[i], "");
   }
 }

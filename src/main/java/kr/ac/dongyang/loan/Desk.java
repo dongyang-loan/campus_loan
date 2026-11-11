@@ -201,7 +201,7 @@ from item i left join unit u on i.id=u.item_id where not exists(select 1 from re
     var units = f.getOrDefault("units", List.of());
     check(!units.isEmpty(), "고유번호를 선택해 주세요.");
     long staff = number(f, "staff");
-    check(count("select count(*) from staff where id=?", staff) == 1, "담당자를 확인해 주세요.");
+    check(count("select count(*) from staff where id=? and archived_name is null", staff) == 1, "담당자를 확인해 주세요.");
     boolean deposit = f.containsKey("deposit"), card = f.containsKey("card");
     String exceptionReason = null;
     if (!deposit || !card) {

@@ -23,6 +23,7 @@ class DutyService {
           .followRedirects(HttpClient.Redirect.NORMAL)
           .build();
   com.google.auth.oauth2.GoogleCredentials credentials;
+  String currentSheet;
   LocalDate cachedDate;
   Instant expires = Instant.MIN;
   List<String> names = List.of();
@@ -49,11 +50,11 @@ class DutyService {
     String url =
         privateSheet
             ? "https://sheets.googleapis.com/v4/spreadsheets/"
-                + sheetId
+                + currentSheet
                 + "/values/"
                 + encode("'" + tab + "'!A:H")
             : "https://docs.google.com/spreadsheets/d/"
-                + sheetId
+                + currentSheet
                 + "/gviz/tq?tqx=out:csv&headers=0&sheet="
                 + encode(tab)
                 + "&refresh="
@@ -123,7 +124,10 @@ class DutyService {
   synchronized Map<String, Object> today() {
     var date = desk.now().toLocalDate();
     var instant = Instant.now();
-    if (!date.equals(cachedDate) || !instant.isBefore(expires)) {
+    String selected = desk.database().queryForObject(
+        "select coalesce((select sheet_id from duty_source where id=1), ?)", String.class, sheetId);
+    if (!Objects.equals(selected, currentSheet) || !date.equals(cachedDate) || !instant.isBefore(expires)) {
+      currentSheet = selected;
       try {
         names = parse(fetch(date), date);
         failed = false;
@@ -137,7 +141,7 @@ class DutyService {
     }
     var contacts = new ArrayList<Map<String, String>>();
     Map<String, String> phones = new HashMap<>();
-    for (var person : desk.rows("select name,phone from staff")) {
+    for (var person : desk.rows("select name,phone from staff where archived_name is null")) {
       phones.put(normalize(person.get("name").toString()), person.get("phone").toString());
     }
     for (String name : names) {

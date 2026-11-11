@@ -17,3 +17,7 @@ create table if not exists item_photo(item_id bigint primary key references item
 alter table application add column if not exists consent_at timestamp;
 
 create table if not exists retired_item(item_id bigint primary key references item);
+
+alter table staff add column if not exists archived_name varchar(50);
+alter table staff_login add column if not exists session_key uuid default random_uuid() not null;
+create table if not exists duty_source(id int primary key, sheet_id varchar(128) not null);
